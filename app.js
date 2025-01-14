@@ -21,7 +21,7 @@ app.use(express.urlencoded({extended : true, limit : "16kb"}));
 // extended : true allows to parse the nested object
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static("public"))
 // public is the folder where we store the static files like images, css, pdf, js etc.
 
 
@@ -30,4 +30,11 @@ app.use(cookieParser());
 
 // ------------------------------------------------------------------------------------------------------------------------
 
+//routes import
+import userRouter from './src/routes/user.router.js';
+
+app.use("/api/v1/users", userRouter)
+
+
+// http://localhost:8000/api/v1/users/register
 export default app; 

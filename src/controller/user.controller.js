@@ -1,5 +1,6 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import { User } from '../models/User.models.js';
+import { uploadOnCloudinary } from '../utils/cloudinary.js';
 
 // ------------------------------------------------------------------------------------------------------------------------
 //                                                          LOGIC
@@ -27,7 +28,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // }
 
   if (
-    [username, email, fullName, password].some((field) => field.trim() === '')
+    [username, email, fullName, password].some((field) => field?.trim() === '')
   ) {
     return res
       .status(400)
@@ -50,9 +51,9 @@ const registerUser = asyncHandler(async (req, res) => {
   // 4. Check for images, avatar (as it is req. field)
   // Before checking this, we need to configure routes
 
-  console.log(req.files);
   const avatarLocalPath = req.files?.avatar[0]?.path;
   const coverImageLocalPath = req.files?.coverImage[0]?.path;
+  console.log('avatarLocalPath', avatarLocalPath);
 
   if (!avatarLocalPath) {
     return res
@@ -62,13 +63,23 @@ const registerUser = asyncHandler(async (req, res) => {
 
   // 5. Upload them to cloudinary, get url, check for avatar again
 
-  const avatarURL = await uploadToCloudinary(avatarLocalPath);
-  const coverImageURL = await uploadOnCloudinary(coverImageLocalPath);
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  console.log('avatar', avatar);
+
   //uploadtocloudinary should ideally upload the image to cloudinary and by any chance if it fails, we should handle it. since it is issue from our side, we should return 500 status code
-  if (!avatarURL) {
+  if (!avatar) {
+    console.error('Avatar upload failed:', avatar);
     return res
       .status(500)
       .json({ success: false, message: 'Failed to upload avatar image' });
+  }
+
+  if (!coverImage) {
+    console.error('Cover image upload failed:', coverImage);
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to upload cover image' });
   }
 
   // 6. create user obj. i.e store in db
@@ -77,8 +88,8 @@ const registerUser = asyncHandler(async (req, res) => {
     email,
     fullName,
     password,
-    avatar: avatarURL.secure_url,
-    coverImage: coverImageURL?.secure_url || '',
+    avatar: avatar.secure_url,
+    coverImage: coverImage?.secure_url || '',
   });
 
   // 7-8. Check for user creation + remove password and refresh token from response
@@ -87,9 +98,16 @@ const registerUser = asyncHandler(async (req, res) => {
   );
 
   // 9. Send response to frontend
+  if (!createdUser)
+    return res
+      .status(500)
+      .json({ success: false, message: 'Failed to create user' });
+
   res.status(201).json({
     success: true,
-    message: 'User registered successfully',
     createdUser,
+    message: 'User registered successfully',
   });
 });
+
+export { registerUser };
