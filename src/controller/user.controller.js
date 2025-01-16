@@ -1,9 +1,10 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import { User } from '../models/User.models.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
+import { ApiError, ApiResponse} from '../utils/ApiError.js';
 
 // ------------------------------------------------------------------------------------------------------------------------
-//                                                          LOGIC
+//                                                       Register User LOGIC
 // ------------------------------------------------------------------------------------------------------------------------
 
 // 1. Get user data from frontedn , request body
@@ -110,4 +111,74 @@ const registerUser = asyncHandler(async (req, res) => {
   });
 });
 
+// ------------------------------------------------------------------------------------------------------------------------
+//                                                       Login User LOGIC
+// ------------------------------------------------------------------------------------------------------------------------
+
+// 1. Get user data from frontedn , request body
+// 2. username or email
+// 3. find user
+// 4. Generate access and refresh token and update user with refresh token
+// 5. Send cookies to frontend
+
+// ------------------------------------------------------------------------------------------------------------------------
+const loginUser = asyncHandler(async (req, res) => { 
+
+  // Step 1 : Extract details from request body
+  const {email, username, password} = req.body;
+  if(!email || !username || !password){
+    throw new ApiError(400, 'Please fill the required details')
+  }
+
+  // Step 2: Find user
+  const user= await User.findOne({
+    $or : [{email} , {username}]
+  })
+
+  if(!user){
+    return ApiError(400, 'User not found')
+  }
+
+  // Validate password
+    const isPasswordValid = await user.isPasswordCorrect(password);
+    if(!isPasswordValid){
+      throw new ApiError(400, 'Invalid password')
+    }
+
+  // Step 3: Generate access and refresh token and update user with refresh token
+    const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id);
+
+  // Step 4: Send cookies to frontend
+    const options={
+      httpOnly: true,
+      secure: true
+    }
+  // I don't want to send password and refresh token to user
+    const loggedInUser = await User.findById(user._id).select('-password -refreshToken');
+
+    return res
+    .status(200)
+    .cookie('accessToken', accessToken, options)
+    .cookie('refreshToken', refreshToken,options)
+    .json(
+      new ApiResponse(200, {user: loggedInUser, accessToken, refreshToken}, 'User logged in successfully')
+    )
+});
+
+
+async function generateAccessAndRefereshTokens(userId){
+  try {
+    const user= await User.findById(userId);
+  
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+  
+    user.refreshToken = refreshToken;
+    await user.save({validateBeforeSave: false}); // we are not validating before saving because we are not updating any field. IMP Step
+  
+    return {accessToken, refreshToken}
+  } catch (error) {
+    throw new ApiError(500, 'Failed to generate tokens')
+  }
+}
 export { registerUser };
