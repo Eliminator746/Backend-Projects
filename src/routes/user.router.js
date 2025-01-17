@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { upload } from '../middleware/multer.middleware.js';
-import { registerUser } from '../controller/user.controller.js';
+import { registerUser, loginUser, logoutUser, refreshAccessToken } from '../controller/user.controller.js';
+import { verifyJWT } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
@@ -19,6 +20,12 @@ router.route('/register').post(
 
   registerUser
 );
+
+router.route('/login').post(loginUser);
+router.route('/logout').post(verifyJWT,logoutUser);
+
+// Frontend uses this endpoint to redirect if access token is expired
+router.route("/refresh-token").post(refreshAccessToken)
 
 export default router;
 // We have used the upload.fields middleware to handle the file uploads.

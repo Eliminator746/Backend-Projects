@@ -1,7 +1,9 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import { User } from '../models/User.models.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
-import { ApiError, ApiResponse} from '../utils/ApiError.js';
+import { ApiError} from '../utils/ApiError.js';
+import { ApiResponse } from '../utils/ApiResponse.js';
+import jwt from "jsonwebtoken"
 
 // ------------------------------------------------------------------------------------------------------------------------
 //                                                       Register User LOGIC
@@ -181,4 +183,97 @@ async function generateAccessAndRefereshTokens(userId){
     throw new ApiError(500, 'Failed to generate tokens')
   }
 }
-export { registerUser };
+
+// ------------------------------------------------------------------------------------------------------------------------
+//                                                       Logout User LOGIC
+// ------------------------------------------------------------------------------------------------------------------------
+
+// 1. Get userId from req.user and update refresh token to null
+// 2. Clear cookies
+// 3. Send response
+
+// ------------------------------------------------------------------------------------------------------------------------
+const logoutUser = asyncHandler(async (req, res) => {
+  
+  // Step 1: Get userId from req.user and update refresh token to null
+  console.log('req.user', req.user);
+  await User.findByIdAndUpdate(req.user._id, {refreshToken: null},{new: true});
+
+  // Step 2: Clear cookies
+  const options={
+    httpOnly: true,
+    secure: true,
+  }
+
+  // Step 3: Send response
+  res.status(200)
+  .clearCookie('accessToken', options)
+  .clearCookie('refreshToken', options)
+  .json(new ApiResponse(200, 'User logged out successfully'))
+
+});
+
+// ------------------------------------------------------------------------------------------------------------------------
+//                                                       Renew token after it's expiry LOGIC
+// ------------------------------------------------------------------------------------------------------------------------
+
+// 1. Fetch refresh token from frontend i.e cookie
+// 2. Get user
+// 3. Check refresh token of frontend and backend same or not
+// 4. Generate access token 
+// 5. Send response
+
+// ------------------------------------------------------------------------------------------------------------------------
+const refreshAccessToken= asyncHandler(async (req,res) => {
+
+  // 1. Fetch refresh token from frontend i.e cookie
+    const incomingRefreshToken = req.cookie?.refreshToken || req.body.refreshToken;
+
+    if(!incomingRefreshToken){
+      throw new ApiError(401, "Refresh Token expired")
+    }
+
+  try {
+  // 2. Get user
+      const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+      if(!decodedToken){
+        throw new ApiError(401, "Invalid Token")
+      }
+    
+      const user = await User.findById(decodedToken?._id)
+      if(!user){
+        throw new ApiError(401, "Invalid refresh token")
+      }
+    
+  // 3. Check refresh token of frontend and backend same or not
+      if(incomingRefreshToken !== user?.refreshToken)
+        throw new ApiError(401, "Refresh token is expired or used")
+    
+  // 4. Generate access token 
+      cosnt {accessToken,newRefreshToken} = await generateAccessAndRefereshTokens(user._id)
+    
+      const options = {
+        httpOnly: true,
+        secure: true
+      }
+    
+  // 5. Send response
+      return res
+        .status(200)
+        .cookie('accessToken', accessToken, options)
+        .cookie('refreshToken', refreshToken: newRefreshToken, options)
+        .json(
+          new ApiResponse(
+              200, 
+              {accessToken, refreshToken: newRefreshToken},
+              "Access token refreshed"
+          )
+      )
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid refresh token")
+  }
+
+});
+
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
